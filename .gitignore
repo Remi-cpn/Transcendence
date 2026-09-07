@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+*.sqlite3
+
+# Env secrets
+.env
+
+# Node (frontend / full-stack, à compléter par l'équipe)
+node_modules/
+
+# Editors / OS
+.DS_Store
