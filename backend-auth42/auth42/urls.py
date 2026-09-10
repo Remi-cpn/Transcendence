@@ -11,4 +11,5 @@ urlpatterns = [
 	path('sync_all_profils/', views.sync_all_profils, name='sync_all_profils'),
 	path('api/profils/', views.api_profils, name='api_profils'),
 	path('debug/<str:login>/', views.debug_profil, name='debug_profil'),
+	path('comment/<str:login>/', views.add_comment, name='add_comment'),
 ]

@@ -39,15 +39,15 @@ class WhitelistUser(models.Model):
 
 # Class Picsineux
 class Profil(models.Model):
-	profil_id = models.IntegerField(unique=True)
-	profil_login = models.CharField(max_length=50)
-	profil_email = models.EmailField()
-	profil_first_name = models.CharField(max_length=100)
-	profil_last_name = models.CharField(max_length=100)
-	profil_image_url = models.URLField(blank=True)
-	profil_pool_year = models.CharField(max_length=4)
-	profil_pool_month = models.CharField(max_length=20)
-	profil_lvl = models.FloatField(null=True)
+	profil_id 			= models.IntegerField(unique=True)
+	profil_login 		= models.CharField(max_length=50)
+	profil_email 		= models.EmailField()
+	profil_first_name 	= models.CharField(max_length=100)
+	profil_last_name 	= models.CharField(max_length=100)
+	profil_image_url 	= models.URLField(blank=True)
+	profil_pool_year 	= models.CharField(max_length=4)
+	profil_pool_month 	= models.CharField(max_length=20)
+	profil_lvl 			= models.FloatField(null=True)
 
 	def __str__(self):
 		return self.profil_login
@@ -56,6 +56,9 @@ class Profil(models.Model):
 		projects = []
 		for p in self.project_set.all():
 			projects.append(p.to_dict())
+		comments = []
+		for c in self.comment_set.all():
+			comments.append(c.to_dict())
 		return {
 			'id': self.profil_id,
 			'login': self.profil_login,
@@ -67,11 +70,12 @@ class Profil(models.Model):
 			'pool_month': self.profil_pool_month,
 			'lvl': self.profil_lvl,
 			'projects': projects,
+			'comments': comments,
 		}
 
 
 
-# Class pur les projets
+# Class pour les projets
 class Project(models.Model):
 	profil = models.ForeignKey(Profil, on_delete=models.CASCADE)
 	name = models.CharField(max_length=100)
@@ -85,4 +89,18 @@ class Project(models.Model):
 			'slug': self.slug,
 			'valid': self.valid,
 			'note': self.note,
+		}
+
+# Class pour les commentaires
+class Comment(models.Model):
+	profil = models.ForeignKey(Profil, on_delete=models.CASCADE)
+	author = models.ForeignKey(FtUser, on_delete=models.CASCADE)
+	content = models.CharField(max_length=200)
+	created_at = models.DateTimeField(auto_now_add=True)
+
+	def to_dict(self):
+		return {
+			'author': self.author.user_login,
+			'content': self.content,
+			'created_at': self.created_at,
 		}

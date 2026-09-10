@@ -11,9 +11,14 @@ from django.conf import settings
 import requests
 
 # Importation des class
-from .models import FtUser, WhitelistUser, Profil, Project
+from .models import FtUser, WhitelistUser, Profil, Project, Comment
 
 import time
+import json
+
+# Pour le CSRF
+from django.views.decorators.csrf import csrf_exempt
+
 
 def is_logged_in(request):
 	return bool(request.session.get('ft_user_pk'))
@@ -227,3 +232,31 @@ def api_profils(request):
 	for profil in Profil.objects.all():
 		profils.append(profil.to_dict())
 	return JsonResponse({'profils': profils}, json_dumps_params={'indent': 2})
+
+@csrf_exempt # Flag pour contrer la securite CSRF
+def add_comment(request, login):
+	if not is_logged_in(request):
+		return JsonResponse({'authenticated': False}, status=401)
+	
+	if not request.method == 'POST':
+		return JsonResponse({'error': 'method not allowed'}, status=405)
+
+	# Recuperation du json du front et le commentaire
+	data = json.loads(request.body)
+	content = data.get('content')
+	if not content:
+		return JsonResponse({'error': 'content required'}, status=400)
+
+	# Recuperation des information
+	profil = Profil.objects.filter(profil_login=login).first()
+	if not profil:
+		return JsonResponse({'error': 'profil not found'}, status=404)
+
+	# creation du commentaire dans la base de donnee
+	Comment.objects.create(
+		profil = profil,
+		author = FtUser.objects.get(pk=request.session.get('ft_user_pk')),
+		content = content,
+	)
+
+	return JsonResponse({'message': 'Comment created.'})
