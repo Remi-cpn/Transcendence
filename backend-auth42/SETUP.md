@@ -43,7 +43,7 @@ Toujours tester sur `localhost:8000`, pas `127.0.0.1:8000` — les cookies de se
 1. `http://localhost:8000/auth/login/` → Connexion via 42.
 2. `http://localhost:8000/auth/me/` → Renvoyer les infos du connecté.
 3. `http://localhost:8000/auth/sync_all_profils/` →Synchronise tous les piscineux de la session en cours (~35s).
-4. `http://localhost:8000/auth/api/profils/` → Liste JSON des piscineux + progression (voir `API.md`).
+4. `http://localhost:8000/auth/api/profils/` → Liste JSON des piscineux + progression (voir `Backend_README.md`).
 
 ## Commandes utiles
 

@@ -20,12 +20,106 @@ import json
 from django.views.decorators.csrf import csrf_exempt
 
 
+# ——— INTERNE ————————————————————————————————————————————————————————————————————————————————————————————— #
+# (helpers, pas des vues appelees directement par une URL)
+
+# Verifie si un tuteur est connecte (session valide)
 def is_logged_in(request):
 	return bool(request.session.get('ft_user_pk'))
 
-def hello(request):
-	return HttpResponse("Hello depuis auth42")
+# Recupere un token applicatif (grant client_credentials)
+def get_app_token():
+		# requete POST
+		response = requests.post('https://api.intra.42.fr/oauth/token', data={
+			'grant_type': 'client_credentials',
+			'client_id': settings.FT_CLIENT_ID,
+			'client_secret': settings.FT_CLIENT_SECRET,
+		})
+		token = response.json().get('access_token')
+		if not token:
+			return None
+		return token
 
+# Synchronise un piscineux (+ ses projets C) depuis l'API 42 vers la base
+def sync_one_profil(login, token):
+
+	# recuperation des donnee de l'api
+	response = requests.get('https://api.intra.42.fr/v2/users/' + f'{login}', headers={
+		'Authorization': f'Bearer {token}',
+	})
+	if response.status_code != 200:
+		return None
+	data = response.json()
+
+	resultat = None
+	for item in data.get('cursus_users', []):
+		if item.get('cursus_id') == 9:
+			resultat = item
+			break
+
+	if not resultat:
+		return None
+
+
+	# creation du user avec ces donnees
+	profil, created = Profil.objects.update_or_create(
+		profil_id=data.get('id'),
+		defaults={
+			'profil_login': data.get('login'),
+			'profil_email': data.get('email'),
+			'profil_first_name': data.get('first_name'),
+			'profil_last_name': data.get('last_name'),
+			'profil_image_url': data.get('image', {}).get('link') or '', # D'autre images possibles
+			'profil_pool_year': data.get('pool_year'),
+			'profil_pool_month': data.get('pool_month'),
+			'profil_lvl': resultat.get('level'),
+			'profil_location': data.get('location') or '',
+			'profil_correction_point': data.get('correction_point'),
+		},
+	)
+
+	for item in data.get('projects_users', []):
+		if 9 in item.get('cursus_ids', []):
+			Project.objects.update_or_create(
+				profil=profil,
+				slug=item.get('project', {}).get('slug'),
+				defaults={
+					'name': item.get('project', {}).get('name'),
+					'valid': bool(item.get('validated?')), # securite pour projet en cour de validation
+					'note': item.get('final_mark'),
+				},
+			)
+
+
+	return profil
+
+# Liste les logins de tous les piscineux de la session en cours
+def list_profil_login():
+	token = get_app_token()
+	lst_login = []
+	page = 1
+	while True:
+		response = requests.get('https://api.intra.42.fr/v2/users', params={
+			'filter[primary_campus_id]': 31,
+			'filter[pool_year]': 2026,
+			'filter[pool_month]': 'september',
+			'page[size]': 100,
+			'page[number]': page,
+		}, headers={'Authorization': f'Bearer {token}'})
+		elements = response.json()
+		if not elements:
+			break
+		for item in elements:
+			lst_login.append(item.get('login'))
+		page += 1
+
+	return lst_login
+
+
+# ——— APPEL API ————————————————————————————————————————————————————————————————————————————————————————————— #
+# Vues qui interagissent avec l'API de 42
+
+# Redirige vers la page d'autorisation OAuth de 42
 def login(request):
 	params = {
 		'client_id': settings.FT_CLIENT_ID,
@@ -36,6 +130,7 @@ def login(request):
 	url = 'https://api.intra.42.fr/oauth/authorize?' + urlencode(params)
 	return redirect(url)
 
+# Callback OAuth : echange le code, verifie la whitelist, connecte le tuteur
 def callback(request):
 	code = request.GET.get('code')
 	if not code:
@@ -76,8 +171,9 @@ def callback(request):
 			'user_email': data.get('email'),
 			'user_first_name': data.get('first_name'),
 			'user_last_name': data.get('last_name'),
-			'user_image_url': data.get('image', {}).get('link'), # D'autre images possibles
+			'user_image_url': data.get('image', {}).get('link') or '', # D'autre images possibles
 			'user_kind': data.get('kind'),
+			'user_location': data.get('location') or '',
 		},
 	)
 
@@ -85,17 +181,8 @@ def callback(request):
 
 	return HttpResponse(f"Login: {data.get('login')} / Email: {data.get('email')}")
 
-def me(request):
-	if not is_logged_in(request):
-		return JsonResponse({'authenticated': False}, status=401)
-
-	# Recupere le user
-	ft_user = FtUser.objects.get(pk=request.session.get('ft_user_pk'))
-
-	return JsonResponse({'authenticated': True, 'user_dict': ft_user.to_dict()})
-
+# Debug : profil brut d'un login sur l'API 42, sans sauvegarde en base
 def debug_profil(request, login):
-	# Recupere le profil brut de n'importe qui sur l'API 42, sans le sauvegarder en base. Pour tester.
 	if not is_logged_in(request):
 		return JsonResponse({'error': 'not authenticated'}, status=401)
 	token = get_app_token()
@@ -106,68 +193,7 @@ def debug_profil(request, login):
 		return JsonResponse({'error': 'not found'}, status=404)
 	return JsonResponse(response.json(), json_dumps_params={'indent': 2})
 
-def get_app_token():
-		# requete POST
-		response = requests.post('https://api.intra.42.fr/oauth/token', data={
-			'grant_type': 'client_credentials',
-			'client_id': settings.FT_CLIENT_ID,
-			'client_secret': settings.FT_CLIENT_SECRET,
-		})
-		token = response.json().get('access_token')
-		if not token:
-			return None
-		return token
-	
-def sync_one_profil(login, token):
-
-	# recuperation des donnee de l'api
-	response = requests.get('https://api.intra.42.fr/v2/users/' + f'{login}', headers={
-		'Authorization': f'Bearer {token}',
-	})
-	if response.status_code != 200:
-		return None
-	data = response.json()
-	
-	resultat = None
-	for item in data.get('cursus_users', []):
-		if item.get('cursus_id') == 9:
-			resultat = item
-			break
-
-	if not resultat:
-		return None
-
-
-	# creation du user avec ces donnees
-	profil, created = Profil.objects.update_or_create(
-		profil_id=data.get('id'),
-		defaults={
-			'profil_login': data.get('login'),
-			'profil_email': data.get('email'),
-			'profil_first_name': data.get('first_name'),
-			'profil_last_name': data.get('last_name'),
-			'profil_image_url': data.get('image', {}).get('link'), # D'autre images possibles
-			'profil_pool_year': data.get('pool_year'),
-			'profil_pool_month': data.get('pool_month'),
-			'profil_lvl': resultat.get('level'),
-		},
-	)
-
-	for item in data.get('projects_users', []):
-		if 9 in item.get('cursus_ids', []):
-			Project.objects.update_or_create(
-				profil=profil,
-				slug=item.get('project', {}).get('slug'),
-				defaults={
-					'name': item.get('project', {}).get('name'),
-					'valid': bool(item.get('validated?')), # securite pour projet en cour de validation 
-					'note': item.get('final_mark'),
-				},
-			)
-
-
-	return profil
-
+# Vue : synchronise un seul piscineux par son login
 def sync_profil(request, login):
 	if not is_logged_in(request):
 		return JsonResponse({'error': 'not authenticated'}, status=401)
@@ -177,27 +203,7 @@ def sync_profil(request, login):
 		return JsonResponse({'error': 'profil not found'}, status=404)
 	return JsonResponse({'synced': profil.profil_login})
 
-def list_profil_login():
-	token = get_app_token()
-	lst_login = []
-	page = 1
-	while True:
-		response = requests.get('https://api.intra.42.fr/v2/users', params={
-			'filter[primary_campus_id]': 31,
-			'filter[pool_year]': 2026,
-			'filter[pool_month]': 'september',
-			'page[size]': 100,
-			'page[number]': page,
-		}, headers={'Authorization': f'Bearer {token}'})
-		elements = response.json()
-		if not elements:
-			break
-		for item in elements:
-			lst_login.append(item.get('login'))
-		page += 1
-
-	return lst_login
-
+# Vue : synchronise tous les piscineux, affiche une page HTML de resultat
 def sync_all_profils(request):
 	if not is_logged_in(request):
 		return JsonResponse({'error': 'not authenticated'}, status=401)
@@ -224,20 +230,16 @@ def sync_all_profils(request):
 	html = f"<ul>{html}</ul>"
 	return HttpResponse(html)
 
-def api_profils(request):
-	if not is_logged_in(request):
-		return JsonResponse({'authenticated': False}, status=401)
 
-	profils = []
-	for profil in Profil.objects.all():
-		profils.append(profil.to_dict())
-	return JsonResponse({'profils': profils}, json_dumps_params={'indent': 2})
+# ——— RECOIT DU FRONT ————————————————————————————————————————————————————————————————————————————————————————————— #
+# Vues qui acceptent des donnees envoyees par le front
 
+# Cree un commentaire tuteur sur un piscineux (POST)
 @csrf_exempt # Flag pour contrer la securite CSRF
 def add_comment(request, login):
 	if not is_logged_in(request):
 		return JsonResponse({'authenticated': False}, status=401)
-	
+
 	if not request.method == 'POST':
 		return JsonResponse({'error': 'method not allowed'}, status=405)
 
@@ -258,5 +260,39 @@ def add_comment(request, login):
 		author = FtUser.objects.get(pk=request.session.get('ft_user_pk')),
 		content = content,
 	)
-
+ 
 	return JsonResponse({'message': 'Comment created.'})
+
+# ——— ENVOI AU FRONT ————————————————————————————————————————————————————————————————————————————————————————————— #
+# Vues qui renvoient des donnees au front (lecture seule)
+
+# Infos du tuteur actuellement connecte
+def me(request):
+	if not is_logged_in(request):
+		return JsonResponse({'authenticated': False}, status=401)
+
+	# Recupere le user
+	ft_user = FtUser.objects.get(pk=request.session.get('ft_user_pk'))
+
+	return JsonResponse({'authenticated': True, 'user_dict': ft_user.to_dict()})
+
+# Vue : renvoie en JSON tous les piscineux + leur progression
+def api_profils(request):
+	if not is_logged_in(request):
+		return JsonResponse({'authenticated': False}, status=401)
+
+	profils = []
+	for profil in Profil.objects.all():
+		profils.append(profil.to_dict())
+	return JsonResponse({'profils': profils}, json_dumps_params={'indent': 2})
+
+# Vue : renvoie en JSON un seul piscineux + sa progression
+def api_profil(request, login):
+	if not is_logged_in(request):
+		return JsonResponse({'authenticated': False}, status=401)
+
+	profil = Profil.objects.filter(profil_login=login).first()
+	if not profil:
+		return JsonResponse({'error': 'profil not found'}, status=404)
+
+	return JsonResponse(profil.to_dict(), json_dumps_params={'indent': 2})
