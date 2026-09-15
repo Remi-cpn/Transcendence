@@ -2,7 +2,7 @@ from django.shortcuts import redirect
 from urllib.parse import urlencode
 
 # Pour les return en http et json.
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseRedirect, JsonResponse
 
 # Importation de settings pour avoir acces au variable de .env
 from django.conf import settings
@@ -24,34 +24,34 @@ from django.views.decorators.csrf import csrf_exempt
 # (helpers, pas des vues appelees directement par une URL)
 
 # Verifie si un tuteur est connecte (session valide)
-def is_logged_in(request):
+def is_logged_in(request: HttpRequest) -> bool:
 	return bool(request.session.get('ft_user_pk'))
 
 # Recupere un token applicatif (grant client_credentials)
-def get_app_token():
+def get_app_token() -> str | None:
 		# requete POST
-		response = requests.post('https://api.intra.42.fr/oauth/token', data={
+		response: requests.Response = requests.post('https://api.intra.42.fr/oauth/token', data={
 			'grant_type': 'client_credentials',
 			'client_id': settings.FT_CLIENT_ID,
 			'client_secret': settings.FT_CLIENT_SECRET,
 		})
-		token = response.json().get('access_token')
+		token: str | None = response.json().get('access_token')
 		if not token:
 			return None
 		return token
 
-# Synchronise un piscineux (+ ses projets C) depuis l'API 42 vers la base
-def sync_one_profil(login, token):
+# Synchronise un piscineux (+ ses projets C) depuis l'API 42 vers la database
+def sync_one_profil(login: str, token: str) -> Profil | None:
 
 	# recuperation des donnee de l'api
-	response = requests.get('https://api.intra.42.fr/v2/users/' + f'{login}', headers={
+	response: requests.Response = requests.get('https://api.intra.42.fr/v2/users/' + f'{login}', headers={
 		'Authorization': f'Bearer {token}',
 	})
 	if response.status_code != 200:
 		return None
-	data = response.json()
+	data: dict = response.json()
 
-	resultat = None
+	resultat: dict | None = None
 	for item in data.get('cursus_users', []):
 		if item.get('cursus_id') == 9:
 			resultat = item
@@ -94,19 +94,21 @@ def sync_one_profil(login, token):
 	return profil
 
 # Liste les logins de tous les piscineux de la session en cours
-def list_profil_login():
-	token = get_app_token()
-	lst_login = []
-	page = 1
+def list_profil_login() -> list[str]:
+	token: str | None = get_app_token()
+	if not token:
+		return []
+	lst_login: list[str] = []
+	page: int = 1
 	while True:
-		response = requests.get('https://api.intra.42.fr/v2/users', params={
+		response: requests.Response = requests.get('https://api.intra.42.fr/v2/users', params={
 			'filter[primary_campus_id]': 31,
 			'filter[pool_year]': 2026,
 			'filter[pool_month]': 'september',
 			'page[size]': 100,
 			'page[number]': page,
 		}, headers={'Authorization': f'Bearer {token}'})
-		elements = response.json()
+		elements: list[dict] = response.json()
 		if not elements:
 			break
 		for item in elements:
@@ -120,25 +122,25 @@ def list_profil_login():
 # Vues qui interagissent avec l'API de 42
 
 # Redirige vers la page d'autorisation OAuth de 42
-def login(request):
-	params = {
+def login(request: HttpRequest) -> HttpResponseRedirect:
+	params: dict = {
 		'client_id': settings.FT_CLIENT_ID,
 		'redirect_uri': settings.FT_REDIRECT_URI,
 		'response_type': 'code',
 		'scope': 'public',
 	}
-	url = 'https://api.intra.42.fr/oauth/authorize?' + urlencode(params)
+	url: str = 'https://api.intra.42.fr/oauth/authorize?' + urlencode(params)
 	return redirect(url)
 
 # Callback OAuth : echange le code, verifie la whitelist, connecte le tuteur
-def callback(request):
-	code = request.GET.get('code')
+def callback(request: HttpRequest) -> HttpResponse | JsonResponse:
+	code: str | None = request.GET.get('code')
 	if not code:
-		error = request.GET.get('error')
+		error: str | None = request.GET.get('error')
 		return HttpResponse(f"Error : {error}")
 
 	# requete POST
-	response = requests.post('https://api.intra.42.fr/oauth/token', data={
+	response: requests.Response = requests.post('https://api.intra.42.fr/oauth/token', data={
 		'grant_type': 'authorization_code',
 		'client_id': settings.FT_CLIENT_ID,
 		'client_secret': settings.FT_CLIENT_SECRET,
@@ -147,8 +149,8 @@ def callback(request):
 	})
 
 	#Pars de json en python
-	data = response.json()
-	token = data.get('access_token')
+	data: dict = response.json()
+	token: str | None = data.get('access_token')
 	if not token:
 		return JsonResponse({'error': 'token exchange failed'}, status=400)
 
@@ -182,11 +184,13 @@ def callback(request):
 	return HttpResponse(f"Login: {data.get('login')} / Email: {data.get('email')}")
 
 # Debug : profil brut d'un login sur l'API 42, sans sauvegarde en base
-def debug_profil(request, login):
+def debug_profil(request: HttpRequest, login: str) -> JsonResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'error': 'not authenticated'}, status=401)
-	token = get_app_token()
-	response = requests.get(f'https://api.intra.42.fr/v2/users/{login}', headers={
+	token: str | None = get_app_token()
+	if not token:
+		return JsonResponse({'error': 'could not get app token'}, status=502)
+	response: requests.Response = requests.get(f'https://api.intra.42.fr/v2/users/{login}', headers={
 		'Authorization': f'Bearer {token}',
 	})
 	if response.status_code != 200:
@@ -194,38 +198,42 @@ def debug_profil(request, login):
 	return JsonResponse(response.json(), json_dumps_params={'indent': 2})
 
 # Vue : synchronise un seul piscineux par son login
-def sync_profil(request, login):
+def sync_profil(request: HttpRequest, login: str) -> JsonResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'error': 'not authenticated'}, status=401)
-	token = get_app_token()
-	profil = sync_one_profil(login, token)
+	token: str | None = get_app_token()
+	if not token:
+		return JsonResponse({'error': 'could not get app token'}, status=502)
+	profil: Profil | None = sync_one_profil(login, token)
 	if not profil:
 		return JsonResponse({'error': 'profil not found'}, status=404)
 	return JsonResponse({'synced': profil.profil_login})
 
 # Vue : synchronise tous les piscineux, affiche une page HTML de resultat
-def sync_all_profils(request):
+def sync_all_profils(request: HttpRequest) -> HttpResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'error': 'not authenticated'}, status=401)
-	lst_login = list_profil_login()
-	html = ""
-	token = get_app_token()
+	lst_login: list[str] = list_profil_login()
+	html: str = ""
+	token: str | None = get_app_token()
+	if not token:
+		return HttpResponse("Erreur : impossible d'obtenir un token applicatif")
 	for login in lst_login:
-		profil = sync_one_profil(login, token)
+		profil: Profil | None = sync_one_profil(login, token)
 		time.sleep(0.5) # Pause pour pas declancher le rate limit de l'api
 		if not profil:
 			continue
-		sous_liste = ""
+		sous_liste: str = ""
 		for key, value in profil.to_dict().items():
 			if key == 'projects':
 				continue
 			sous_liste += f"<li>{key}: {value}</li>"
 
-		sous_liste_projets = ""
+		sous_liste_projets: str = ""
 		for projet in Project.objects.filter(profil=profil):
 			sous_liste_projets += f"<li>{projet.name} ({projet.slug}) - valid: {projet.valid} - note: {projet.note}</li>"
 
-		ligne = f"<li><b>{profil.profil_login}</b><ul>{sous_liste}<li><b>Projets</b><ul>{sous_liste_projets}</ul></li></ul></li>"
+		ligne: str = f"<li><b>{profil.profil_login}</b><ul>{sous_liste}<li><b>Projets</b><ul>{sous_liste_projets}</ul></li></ul></li>"
 		html = html + ligne
 	html = f"<ul>{html}</ul>"
 	return HttpResponse(html)
@@ -236,7 +244,7 @@ def sync_all_profils(request):
 
 # Cree un commentaire tuteur sur un piscineux (POST)
 @csrf_exempt # Flag pour contrer la securite CSRF
-def add_comment(request, login):
+def add_comment(request: HttpRequest, login: str) -> JsonResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'authenticated': False}, status=401)
 
@@ -244,13 +252,13 @@ def add_comment(request, login):
 		return JsonResponse({'error': 'method not allowed'}, status=405)
 
 	# Recuperation du json du front et le commentaire
-	data = json.loads(request.body)
-	content = data.get('content')
+	data: dict = json.loads(request.body)
+	content: str | None = data.get('content')
 	if not content:
 		return JsonResponse({'error': 'content required'}, status=400)
 
 	# Recuperation des information
-	profil = Profil.objects.filter(profil_login=login).first()
+	profil: Profil | None = Profil.objects.filter(profil_login=login).first()
 	if not profil:
 		return JsonResponse({'error': 'profil not found'}, status=404)
 
@@ -267,31 +275,31 @@ def add_comment(request, login):
 # Vues qui renvoient des donnees au front (lecture seule)
 
 # Infos du tuteur actuellement connecte
-def me(request):
+def me(request: HttpRequest) -> JsonResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'authenticated': False}, status=401)
 
 	# Recupere le user
-	ft_user = FtUser.objects.get(pk=request.session.get('ft_user_pk'))
+	ft_user: FtUser = FtUser.objects.get(pk=request.session.get('ft_user_pk'))
 
 	return JsonResponse({'authenticated': True, 'user_dict': ft_user.to_dict()})
 
 # Vue : renvoie en JSON tous les piscineux + leur progression
-def api_profils(request):
+def api_profils(request: HttpRequest) -> JsonResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'authenticated': False}, status=401)
 
-	profils = []
+	profils: list[dict] = []
 	for profil in Profil.objects.all():
 		profils.append(profil.to_dict())
 	return JsonResponse({'profils': profils}, json_dumps_params={'indent': 2})
 
 # Vue : renvoie en JSON un seul piscineux + sa progression
-def api_profil(request, login):
+def api_profil(request: HttpRequest, login: str) -> JsonResponse:
 	if not is_logged_in(request):
 		return JsonResponse({'authenticated': False}, status=401)
 
-	profil = Profil.objects.filter(profil_login=login).first()
+	profil: Profil | None = Profil.objects.filter(profil_login=login).first()
 	if not profil:
 		return JsonResponse({'error': 'profil not found'}, status=404)
 

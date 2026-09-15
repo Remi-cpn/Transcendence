@@ -1,25 +1,26 @@
 from django.db import models
+from datetime import datetime
 
 # Class par user se connectant au site
 class FtUser(models.Model):
-	user_id 			= models.IntegerField(unique=True) # unique=True: jamais 2 fois le meme utilisateur
-	user_login 			= models.CharField(max_length=50)
-	user_email 			= models.EmailField()
-	user_first_name		= models.CharField(max_length=100)
-	user_last_name		= models.CharField(max_length=100)
-	user_image_url		= models.URLField(blank=True) # blank: le champ peut être vide
-	user_created_at		= models.DateTimeField(auto_now_add=True)
-	user_updated_at		= models.DateTimeField(auto_now=True)
-	user_kind			= models.CharField(max_length=50, default='')
-	user_location		= models.CharField(max_length=20, blank=True)
+	user_id: int 				= models.IntegerField(unique=True) # unique=True: jamais 2 fois le meme utilisateur
+	user_login: str 			= models.CharField(max_length=50)
+	user_email: str 			= models.EmailField()
+	user_first_name: str		= models.CharField(max_length=100)
+	user_last_name: str			= models.CharField(max_length=100)
+	user_image_url: str			= models.URLField(blank=True) # blank: le champ peut être vide
+	user_created_at: datetime	= models.DateTimeField(auto_now_add=True)
+	user_updated_at: datetime	= models.DateTimeField(auto_now=True)
+	user_kind: str				= models.CharField(max_length=50, default='')
+	user_location: str			= models.CharField(max_length=20, blank=True)
 
 
 	# Surcharge operator<<
-	def	__str__(self):
+	def	__str__(self) -> str:
 		return self.user_login
 
 	# Revoi un dict des valeur de la class
-	def to_dict(self):
+	def to_dict(self) -> dict:
 		return {
 			'id': self.user_id,
 			'login': self.user_login,
@@ -33,54 +34,54 @@ class FtUser(models.Model):
 
 # Class Whitelist
 class WhitelistUser(models.Model):
-	wl_login = models.CharField(max_length=50, unique=True)
+	wl_login: str = models.CharField(max_length=50, unique=True)
 
 	# Surcharge operator<<
-	def	__str__(self):
+	def	__str__(self) -> str:
 		return self.wl_login
 
 # Class Picsineux
 class Profil(models.Model):
-	profil_id 					= models.IntegerField(unique=True)
-	profil_login 				= models.CharField(max_length=50)
-	profil_email 				= models.EmailField()
-	profil_first_name 			= models.CharField(max_length=100)
-	profil_last_name 			= models.CharField(max_length=100)
-	profil_image_url 			= models.URLField(blank=True)
-	profil_pool_year 			= models.CharField(max_length=4)
-	profil_pool_month 			= models.CharField(max_length=20)
-	profil_lvl 					= models.FloatField(null=True)
-	profil_location				= models.CharField(max_length=20, blank=True)
-	profil_correction_point 	= models.IntegerField(null=True)
-	profil_is_online 			= models.BooleanField(default=False)
+	profil_id: int 						= models.IntegerField(unique=True)
+	profil_login: str 					= models.CharField(max_length=50)
+	profil_email: str 					= models.EmailField()
+	profil_first_name: str 				= models.CharField(max_length=100)
+	profil_last_name: str 				= models.CharField(max_length=100)
+	profil_image_url: str 				= models.URLField(blank=True)
+	profil_pool_year: str 				= models.CharField(max_length=4)
+	profil_pool_month: str 				= models.CharField(max_length=20)
+	profil_lvl: float | None 			= models.FloatField(null=True)
+	profil_location: str				= models.CharField(max_length=20, blank=True)
+	profil_correction_point: int | None	= models.IntegerField(null=True)
+	profil_is_online: bool 				= models.BooleanField(default=False)
 
 	# soft_skills
-	profil_timidity 			= models.IntegerField(null=True)
-	profil_stress 				= models.IntegerField(null=True)
-	profil_peer_help 			= models.IntegerField(null=True)
-	profil_self_research 		= models.IntegerField(null=True)
-	profil_perseverance 		= models.IntegerField(null=True)
+	profil_timidity: int | None 		= models.IntegerField(null=True)
+	profil_stress: int | None 			= models.IntegerField(null=True)
+	profil_peer_help: int | None 		= models.IntegerField(null=True)
+	profil_self_research: int | None 	= models.IntegerField(null=True)
+	profil_perseverance: int | None 	= models.IntegerField(null=True)
 
 	# presence
-	profil_total_hours 			= models.FloatField(null=True)
-	profil_daily_average_hours 	= models.FloatField(null=True)
-	profil_morning_hours 		= models.FloatField(null=True)
-	profil_afternoon_hours 		= models.FloatField(null=True)
-	profil_night_hours 			= models.FloatField(null=True)
-	profil_preferred_slot 		= models.CharField(max_length=20, blank=True)
+	profil_total_hours: float | None 			= models.FloatField(null=True)
+	profil_daily_average_hours: float | None	= models.FloatField(null=True)
+	profil_morning_hours: float | None 			= models.FloatField(null=True)
+	profil_afternoon_hours: float | None 		= models.FloatField(null=True)
+	profil_night_hours: float | None 			= models.FloatField(null=True)
+	profil_preferred_slot: str 					= models.CharField(max_length=20, blank=True)
 
 	# risk
-	profil_risk_score = models.IntegerField(null=True)
-	profil_risk_level = models.CharField(max_length=20, blank=True)
+	profil_risk_score: int | None	= models.IntegerField(null=True)
+	profil_risk_level: str 			= models.CharField(max_length=20, blank=True)
 
-	def __str__(self):
+	def __str__(self) -> str:
 		return self.profil_login
 
-	def to_dict(self):
-		projects = []
+	def to_dict(self) -> dict:
+		projects: list[dict] = []
 		for p in self.project_set.all():
 			projects.append(p.to_dict())
-		comments = []
+		comments: list[dict] = []
 		for c in self.comment_set.all():
 			comments.append(c.to_dict())
 		return {
@@ -123,13 +124,13 @@ class Profil(models.Model):
 
 # Class pour les projets
 class Project(models.Model):
-	profil = models.ForeignKey(Profil, on_delete=models.CASCADE)
-	name = models.CharField(max_length=100)
-	slug = models.CharField(max_length=100)
-	valid = models.BooleanField(default=False)
-	note = models.IntegerField(null=True)
+	profil: Profil = models.ForeignKey(Profil, on_delete=models.CASCADE)
+	name: str = models.CharField(max_length=100)
+	slug: str = models.CharField(max_length=100)
+	valid: bool = models.BooleanField(default=False)
+	note: int | None = models.IntegerField(null=True)
 
-	def to_dict(self):
+	def to_dict(self) -> dict:
 		return {
 			'name': self.name,
 			'slug': self.slug,
@@ -139,12 +140,12 @@ class Project(models.Model):
 
 # Class pour les commentaires
 class Comment(models.Model):
-	profil = models.ForeignKey(Profil, on_delete=models.CASCADE)
-	author = models.ForeignKey(FtUser, on_delete=models.CASCADE)
-	content = models.CharField(max_length=200)
-	created_at = models.DateTimeField(auto_now_add=True)
+	profil: Profil = models.ForeignKey(Profil, on_delete=models.CASCADE)
+	author: FtUser = models.ForeignKey(FtUser, on_delete=models.CASCADE)
+	content: str = models.CharField(max_length=200)
+	created_at: datetime = models.DateTimeField(auto_now_add=True)
 
-	def to_dict(self):
+	def to_dict(self) -> dict:
 		return {
 			'author': self.author.user_login,
 			'content': self.content,
