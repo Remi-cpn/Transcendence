@@ -3,6 +3,8 @@
 ## Se connecter
 Rediriger vers : `http://localhost:8000/auth/login/`
 
+Une fois la connexion 42 terminée, le backend redirige automatiquement vers le front (`FRONT_URL` côté backend, `http://localhost:5173/` par défaut dans le .env).
+
 ## Savoir qui est connecté et recuprer ses infos
 `GET http://localhost:8000/auth/me/`
 

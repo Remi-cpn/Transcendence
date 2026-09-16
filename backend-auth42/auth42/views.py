@@ -133,7 +133,7 @@ def login(request: HttpRequest) -> HttpResponseRedirect:
 	return redirect(url)
 
 # Callback OAuth : echange le code, verifie la whitelist, connecte le tuteur
-def callback(request: HttpRequest) -> HttpResponse | JsonResponse:
+def callback(request: HttpRequest) -> HttpResponse | JsonResponse | HttpResponseRedirect:
 	code: str | None = request.GET.get('code')
 	if not code:
 		error: str | None = request.GET.get('error')
@@ -181,7 +181,7 @@ def callback(request: HttpRequest) -> HttpResponse | JsonResponse:
 
 	request.session['ft_user_pk'] = ft_user.pk
 
-	return HttpResponse(f"Login: {data.get('login')} / Email: {data.get('email')}")
+	return redirect(settings.FRONT_URL)
 
 # Debug : profil brut d'un login sur l'API 42, sans sauvegarde en base
 def debug_profil(request: HttpRequest, login: str) -> JsonResponse:

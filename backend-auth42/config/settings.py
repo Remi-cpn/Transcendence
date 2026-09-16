@@ -44,10 +44,12 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 	# App Auth42
 	'auth42',
+	'corsheaders',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -80,6 +82,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 FT_CLIENT_ID = os.environ.get('FT_CLIENT_ID')
 FT_CLIENT_SECRET = os.environ.get('FT_CLIENT_SECRET')
 FT_REDIRECT_URI = os.environ.get('FT_REDIRECT_URI')
+FRONT_URL = os.environ.get('FRONT_URL')
+
+# CORS : autorise le serveur de dev frontend (Vite) a appeler cette API
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+]
+CORS_ALLOW_CREDENTIALS = True
 
 
 # Database
